@@ -1,14 +1,16 @@
 # publishing-skills
 
-Three composable Claude skills for shipping a long-tail SEO blog post end-to-end:
+Three composable skills that turn an AI coding agent (Claude, Cursor, Codex, Gemini, Copilot, ...) into a long-tail SEO publishing pipeline. **Platform-agnostic** — works against Ghost, WordPress, Webflow, Sanity, Strapi, or any static-site generator (Hugo, Astro, Eleventy, Jekyll, Next-MDX).
 
-| Skill | What it does | Clawhub |
+Built for indie hackers, founders, content marketers, and dev-tool teams who want AI to draft blog posts that actually rank in search and get quoted by AI assistants — not paraphrased docs, not hallucinated benchmarks, not generic "ultimate guide" filler.
+
+| Skill | What it does | Who it's for |
 |---|---|---|
-| **`blog-topic-research`** | Validates a topic has real, verifiable demand (PAA, Reddit threads, GitHub issues) before drafting. Outputs a research-proof scaffold the writer skill can consume. | [clawhub.ai/skills/blog-topic-research](https://clawhub.ai/skills/blog-topic-research) |
-| **`ghost-blog-writer`** | End-to-end pipeline for a single Ghost CMS post: research -> draft -> scrub LLM tells -> AI-SEO audit -> publish via Admin API. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. | [clawhub.ai/skills/ghost-blog-writer](https://clawhub.ai/skills/ghost-blog-writer) |
-| **`blog-figure-svg`** | Generates accessible SVG figures (flow, comparison bars, taxonomy, terminal mocks, OG feature cards) with system-font palette, rasterizes to compressed PNG. | [clawhub.ai/skills/blog-figure-svg](https://clawhub.ai/skills/blog-figure-svg) |
+| **`blog-topic-research`** | Validates a topic has real, verifiable demand (People Also Ask, Reddit, Stack Overflow, GitHub issues, vendor forums, changelogs) before you spend tokens drafting. Every accepted topic carries citable evidence URLs, a problem summary, confirmed fixes, version context, and FAQ variants the writer can use directly. | Anyone tired of writing posts nobody searches for, and editorial pipelines that need an evidence-backed backlog. |
+| **`seo-blog-writer`** | End-to-end pipeline for a single post: classify → research → draft clean HTML → scrub LLM tells → AI-SEO audit → publish. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. **Platform-pluggable publish step** — ships with Ghost Admin API, WordPress REST, and static-site adapters; any other CMS is a ~20-line snippet. | Founders and marketers who want to ship one ranking post a day without paying a writer or a designer. |
+| **`blog-figure-svg`** | Generates accessible SVG figures (flow, comparison bars, taxonomy, terminal mocks, 1600x840 OG feature cards) with a consistent palette, screen-reader metadata, and figcaption-ready output. Rasterizes to compressed PNG for upload to any CMS. | Anyone shipping more than 3 posts a month who doesn't want stock photos or Midjourney filler on every article. |
 
-Together, they form a complete pipeline: **research the topic -> write the post -> illustrate it -> publish to Ghost**.
+Together, they form a complete pipeline: **research the topic → write the post → illustrate it → publish to your platform of choice**.
 
 ## Installing
 
@@ -17,7 +19,7 @@ Together, they form a complete pipeline: **research the topic -> write the post 
 Installs all 3 skills into Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, and 50+ other runtimes at once:
 
 ```bash
-npx skills add ratamaha-git/publishing-skills
+npx skills add AutomateLab-tech/publishing-skills
 ```
 
 ### Via clawhub CLI (Claude / OpenClaw runtimes)
@@ -26,7 +28,7 @@ npx skills add ratamaha-git/publishing-skills
 npm i -g clawhub
 clawhub login
 clawhub skill install blog-topic-research
-clawhub skill install ghost-blog-writer
+clawhub skill install seo-blog-writer
 clawhub skill install blog-figure-svg
 ```
 
@@ -35,7 +37,7 @@ clawhub skill install blog-figure-svg
 Each skill is a single `SKILL.md` file with YAML frontmatter. Drop it into your project's `.claude/skills/<name>/` directory (or your agent runtime's equivalent skill folder) and reload.
 
 ```bash
-git clone https://github.com/ratamaha-git/publishing-skills.git
+git clone https://github.com/AutomateLab-tech/publishing-skills.git
 cp -r publishing-skills/skills/* .claude/skills/
 ```
 
@@ -43,28 +45,43 @@ cp -r publishing-skills/skills/* .claude/skills/
 
 ```
 +----------------------+      +------------------+      +-------------------+      +-------------------+
-| blog-topic-research  | ---> | (operator review)| ---> | ghost-blog-writer | <--- |  blog-figure-svg  |
+| blog-topic-research  | ---> | (operator review)| ---> |  seo-blog-writer  | <--- |  blog-figure-svg  |
 | 'is the topic worth  |      |  'pick what to   |      | 'write + publish' |      | 'illustrate the   |
 |  writing about?'     |      |   write next'    |      |                   |      |   post'           |
 +----------------------+      +------------------+      +-------------------+      +-------------------+
                                                                 |
                                                                 v
-                                                       Ghost CMS (your blog)
+                                              +----------------------------------+
+                                              | platform adapter (one of):       |
+                                              |   - Ghost Admin API              |
+                                              |   - WordPress REST API           |
+                                              |   - static-site file output      |
+                                              |   - bring-your-own (~20 lines)   |
+                                              +----------------------------------+
 ```
 
 - **`blog-topic-research`** runs first — it answers "does anyone actually search this?" before you spend tokens drafting.
-- **`ghost-blog-writer`** consumes the research-proof scaffold (or runs from scratch), drafts the HTML, validates the payload, and posts to Ghost.
+- **`seo-blog-writer`** consumes the research-proof scaffold (or runs from scratch), drafts the HTML, validates the bundle, and ships it through a platform adapter.
 - **`blog-figure-svg`** is invoked from within the writer's illustration step (or standalone) when a post needs charts, diagrams, or a feature card.
 
 ## Requirements
 
 - **`blog-topic-research`** — no system dependencies beyond `WebSearch` / `WebFetch` in the agent runtime.
-- **`ghost-blog-writer`** — Python 3 (`requests`, `pyjwt`), `GHOST_URL` and `GHOST_ADMIN_KEY` env vars pointing at your Ghost instance.
+- **`seo-blog-writer`** — Python 3. Platform-specific extras:
+  - **Ghost adapter**: `pip install requests pyjwt`; `GHOST_URL` + `GHOST_ADMIN_KEY` env vars.
+  - **WordPress adapter**: `pip install requests`; `WP_URL` + `WP_USER` + `WP_APP_PASSWORD` env vars.
+  - **Static-site adapter**: no credentials; just a target directory in your SSG repo.
 - **`blog-figure-svg`** — Python 3, plus one SVG rasterizer (ImageMagick / `rsvg-convert` / Inkscape / `cairosvg`) and optionally `pngquant` for compression.
+
+## Why platform-agnostic?
+
+The writing pipeline (research, classify, draft, scrub, AI-SEO audit, JSON-LD generation) is the hard part. The publish step is glue. Coupling the two means you're locked into one CMS forever — and if you move from Ghost to WordPress, you rewrite the whole skill.
+
+This repo separates them. The writer produces a stable bundle (`<slug>.draft.html`, `<slug>.schema.html`, `<slug>.metadata.json`) and the adapter ships it. Add Webflow, Sanity, or Strapi in an afternoon without touching the pipeline.
 
 ## Provenance
 
-Extracted and generalized from the editorial pipeline running [automatelab.tech](https://automatelab.tech). The internal versions (`al-topic-research`, `al-write-blog-post`) are coupled to that site's tag taxonomy, cluster palettes, and backlog state; this repo strips those internals and parameterizes everything site-specific (hostname, author slug, tags, palettes) so the skills work against any Ghost blog.
+Extracted and generalized from the editorial pipeline running [automatelab.tech](https://automatelab.tech). The internal versions (`al-topic-research`, `al-write-blog-post`) are coupled to that site's tag taxonomy, cluster palettes, and backlog state; this repo strips those internals and parameterizes everything site-specific (hostname, author slug, tags, palettes) so the skills work against any blog on any platform.
 
 ## License
 

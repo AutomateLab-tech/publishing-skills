@@ -1,9 +1,9 @@
 ---
 name: blog-topic-research
-description: "Research and propose long-tail blog topics backed by real, verifiable user demand. Mines candidates from Google Suggest / autocomplete, People Also Ask, Reddit, Stack Overflow, GitHub issues, vendor community forums, and vendor changelogs. Captures every signal as a citable URL with verbatim evidence text, classifies each topic by post format, optionally runs a cannibalization check against an existing backlog, and outputs a structured list with proof URLs, problem summaries, confirmed fixes, version context, and question variants the writer can use as the article's FAQ block and LSI spread. Trigger when the user says: 'research blog topics', 'find topics with real demand', 'expand the editorial backlog', 'research N long-tail topics', or any variant of growing a content pipeline with verified candidates."
-version: 1.0.0
+description: "Stop writing blog posts nobody searches for. This skill builds your editorial backlog from real, verifiable user demand - never from AI vibes. It mines candidates from Google Suggest, People Also Ask, Reddit, Stack Overflow, GitHub issues, vendor forums, and changelogs; captures every signal as a citable URL with verbatim evidence; classifies each topic by post format (how-to-fix, x-vs-y, listicle, migration, release-recap, ...); checks against your existing backlog so you don't cannibalize what you already published; and outputs a writer-ready scaffold with primary sources, problem summary, confirmed fixes, version context, and FAQ variants. Built for content marketers, founders, indie hackers, and dev-tool teams who want a long-tail SEO pipeline backed by evidence instead of hallucinated keyword volumes. Trigger when the user says: 'research blog topics', 'find topics with real demand', 'expand the editorial backlog', 'research N long-tail topics', or any variant of growing a content pipeline with verified candidates."
+version: 1.1.0
 emoji: "🔎"
-homepage: https://github.com/ratamaha-git/automatelab
+homepage: https://github.com/AutomateLab-tech/publishing-skills
 metadata:
   openclaw:
     requires:

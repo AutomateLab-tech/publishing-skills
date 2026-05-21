@@ -1,9 +1,9 @@
 ---
 name: blog-figure-svg
-description: "Generate accessible, lightweight SVG figures for blog posts: flow diagrams, comparison bar charts, taxonomy/Venn diagrams, annotated terminal mocks, and templated OG feature cards. Hand-authored SVG (no embedded fonts, no external assets), rasterized to PNG for upload, with consistent palette, accessibility metadata (title/desc, aria-labelledby), and figcaption-ready output. Trigger when the user says: 'add a figure to the blog post', 'illustrate this comparison', 'draw a flow diagram for X', 'make a feature image for the post', or any request to produce a chart/diagram for editorial use."
-version: 1.0.0
+description: "Stop using stock photos. Generate accessible, lightweight SVG figures for any blog or CMS - flow diagrams, comparison bar charts, taxonomy/Venn diagrams, annotated terminal mocks, and 1600x840 OG feature cards. Hand-authored SVG (no embedded fonts, no external assets, no AI-image latency) with a consistent palette, screen-reader metadata (title + desc + aria-labelledby), and a figcaption-required handoff to the writer. Rasterizes to compressed PNG ready for Ghost, WordPress, Webflow, or any static-site generator. Built for content marketers, indie hackers, and dev-tool blogs that want unique illustrations on every post without paying a designer or burning Midjourney credits. Trigger when the user says: 'add a figure to the post', 'illustrate this comparison', 'draw a flow diagram for X', 'make a feature/OG image', or any request to produce a chart/diagram for editorial use."
+version: 1.1.0
 emoji: "🎨"
-homepage: https://github.com/ratamaha-git/publishing-skills
+homepage: https://github.com/AutomateLab-tech/publishing-skills
 metadata:
   openclaw:
     requires:
@@ -15,7 +15,7 @@ metadata:
 
 Produces SVG figures intended for blog posts: in-line illustrations (1 per ~500 body words is the rule of thumb) and a templated OG feature card. Output is a clean SVG file (the editable source) rasterized to a compressed PNG (what the post references). Every figure carries `title` + `desc` + `role="img"` so screen readers can read it.
 
-This skill complements `ghost-blog-writer` (publishes to Ghost CMS) and `blog-topic-research` (validates the topic). Use it during the **illustration step** of writing a post — after the prose is stable so the anchor sentences are final.
+This skill is **platform-agnostic** — the SVG and PNG it produces work in any CMS (Ghost, WordPress, Webflow, Sanity) or static-site generator (Hugo, Astro, Eleventy, Jekyll, Next-MDX). It complements `seo-blog-writer` (handles the publish step for whatever platform you're on) and `blog-topic-research` (validates the topic). Use it during the **illustration step** of writing a post — after the prose is stable so the anchor sentences are final.
 
 ```
 /blog-figure-svg flow      "<title>"   --steps "Trigger -> Filter -> HTTP -> Slack"
@@ -82,7 +82,7 @@ Pick from these hex values. **No new hues** — consistency across figures is th
 
 **Typography:** `font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif"` only. **No embedded web fonts** — they fail to load in feed readers, dark-mode previews, and AMP renders. Sizes: title 20px bold, section labels 14-16px, axis labels 11-13px.
 
-**ViewBox:** `viewBox="0 0 800 <height>"` for inline figures (Casper-style content columns); `viewBox="0 0 1600 840"` for OG cards. **Do not set root `width`/`height` attributes** — let the host theme scale.
+**ViewBox:** `viewBox="0 0 800 <height>"` for inline figures (a sane width for most CMS content columns, including Ghost's Casper, the WordPress block editor, and Hugo / Astro defaults); `viewBox="0 0 1600 840"` for OG cards. **Do not set root `width`/`height` attributes** — let the host theme scale.
 
 ---
 
@@ -339,7 +339,7 @@ print(f"wrote {out_path} ({len(lines)} lines)")
 
 ## Variant: `feature` — OG / feature card (1600x840)
 
-For: the post's hero image (Ghost `feature_image`, OG previews, social cards). One per post.
+For: the post's hero image (Ghost `feature_image`, WordPress `featured_media`, the static-site front-matter `feature_image` field, OG previews, social cards). One per post.
 
 The card uses a tinted gradient background, a 24px grid pattern at 7% opacity, a soft radial highlight, and either a giant accent number (when the headline contains a 1-3 digit number) or a placeholder icon slot. Brand text (your wordmark, pill label) is configurable.
 
@@ -466,17 +466,17 @@ Open each PNG locally and confirm: text is sharp at 100% zoom, no missing glyphs
 
 For each figure, identify the **anchor sentence** in the draft — the closing `</p>` of the paragraph the figure should appear after. Pick a phrase distinctive enough that `str.replace` finds exactly one match.
 
-Insert with a generic `<figure>` block (Ghost's Casper theme renders this cleanly; most other Ghost themes do too):
+Insert with a generic `<figure>` block (renders cleanly in every major CMS theme and every static-site generator's default Markdown→HTML pipeline):
 
 ```html
 <figure>
-  <img src="<uploaded-png-url>" alt="<full description with all numbers and labels>" loading="lazy">
+  <img src="<uploaded-png-url-or-relative-path>" alt="<full description with all numbers and labels>" loading="lazy">
   <figcaption>One sentence restating the takeaway in plain English (15-30 words).</figcaption>
 </figure>
 ```
 
 **Caption rules:**
-- **Required on every figure.** No bare `<img>` and no `<figure>` without a `<figcaption>`. The `ghost-blog-writer` skill's payload validation refuses figures without captions.
+- **Required on every figure.** No bare `<img>` and no `<figure>` without a `<figcaption>`. The `seo-blog-writer` skill's bundle validation refuses figures without captions.
 - One sentence, 15-30 words, restating the takeaway in plain English (not "Figure showing X" — say what the reader should conclude).
 - Allowed tags inside `<figcaption>`: `<a>` (with `rel="nofollow noopener"` for external), `<em>`. Nothing else.
 - No "Figure 1." numbering.
@@ -502,11 +502,12 @@ Each URL should print `1`. Zero = anchor missed; >1 = anchor matched multiple pa
 
 ## Upload to your CMS
 
-This skill doesn't ship a CMS uploader — the publish skill (e.g. `ghost-blog-writer`) handles auth and the upload endpoint. After generating PNGs:
+This skill doesn't ship a CMS uploader — the `seo-blog-writer` skill handles auth and the upload endpoint for each platform it targets. After generating PNGs:
 
-- **For Ghost:** use the `ghost-blog-writer` skill's Step 6 image-upload snippet (POST to `/ghost/api/admin/images/upload/` with the Admin API JWT).
-- **For WordPress:** use the REST API `/wp/v2/media` endpoint with application password auth.
-- **For static-site generators (Hugo, Astro, Eleventy):** drop the PNGs into the project's static directory and reference relative paths.
+- **For Ghost:** `seo-blog-writer`'s Ghost adapter exposes an image-upload snippet (POST to `/ghost/api/admin/images/upload/` with the Admin API JWT).
+- **For WordPress:** `seo-blog-writer`'s WordPress adapter posts to `/wp-json/wp/v2/media` with application-password auth.
+- **For static-site generators (Hugo, Astro, Eleventy, Jekyll, Next-MDX):** drop the PNGs into the project's static / public / assets directory and reference relative paths in the figure tag.
+- **For other CMSes (Webflow, Sanity, Strapi, Contentful):** write a 20-line adapter that POSTs the PNG to the platform's media endpoint, then splice the returned URL.
 
 ---
 
@@ -527,6 +528,6 @@ This skill doesn't ship a CMS uploader — the publish skill (e.g. `ghost-blog-w
 ## Companion skills
 
 - **`blog-topic-research`** — validates that a long-tail topic has real demand signals before drafting.
-- **`ghost-blog-writer`** — drafts, scrubs, and publishes the post to Ghost CMS via the Admin API.
+- **`seo-blog-writer`** — drafts, scrubs, AI-SEO-audits, and publishes the post to your CMS (Ghost, WordPress, or static-site) via the platform adapter.
 
 Together, the three form a complete long-tail SEO publishing pipeline: research the topic, write the post, illustrate it, publish.
