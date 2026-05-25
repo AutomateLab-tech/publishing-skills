@@ -1,7 +1,7 @@
 ---
 name: seo-blog-writer
 description: "Turn a single long-tail query into a publish-ready blog post that ranks in search and gets quoted by AI assistants. Runs the full pipeline: classify the topic, research it against real sources, draft clean HTML, scrub LLM-tell vocabulary and typography, audit for AI-SEO (TL;DR block, query-phrased H2s, FAQ section, FAQPage + BreadcrumbList + HowTo JSON-LD), then publish through a platform adapter (Ghost Admin API, WordPress REST, or static-site file output). Platform-agnostic core; swap the publish step without rewriting the writing pipeline. Built for indie hackers, founders, and content marketers who want AI to draft posts that are actually citable - not paraphrased docs, not hallucinated benchmarks. Trigger when the user says: 'write a blog post on X', 'draft an article about X', 'publish a post on X to Ghost / WordPress / the static site', or any request to ship editorial content for a long-tail query."
-version: 2.0.0
+version: 2.1.0
 emoji: "✍️"
 homepage: https://github.com/AutomateLab-tech/publishing-skills
 metadata:
@@ -138,9 +138,38 @@ mkdir -p tmp/blog-drafts
 
 Files (gitignored):
 - `tmp/blog-drafts/<slug>.research.md` — 5-question answers, source list, key quotes
+- `tmp/blog-drafts/<slug>.interlinks.json` — written in Step 1f (outbound interlink targets)
 - `tmp/blog-drafts/<slug>.draft.html` — written in Step 3
 - `tmp/blog-drafts/<slug>.schema.html` — written in Step 7b (JSON-LD `<script>` blocks)
 - `tmp/blog-drafts/<slug>.metadata.json` — written in Step 7f (title, slug, tags, meta, etc.)
+- `tmp/blog-drafts/<slug>.refresh.json` — written in Step 7h (versions, prices, years cited; for future refresh runs)
+
+### 1f. Outbound interlinks (recommended; required for >800-word posts)
+
+Pick **2-3 prior posts** on the same site whose topic genuinely overlaps with this one. Bake the links into the draft in Step 3 on topical noun phrases (not "see this post"). Internal links don't carry `nofollow`; outbound links to other domains do (see Step 3 link policy).
+
+Where the candidate list comes from depends on the platform:
+
+- **Ghost** — `GET /ghost/api/admin/posts/?limit=all&filter=status:published&fields=id,slug,title,published_at,custom_excerpt&order=published_at%20desc` (same `GHOST_ADMIN_KEY` Step 8 uses).
+- **WordPress** — `GET /wp-json/wp/v2/posts?per_page=100&_fields=id,slug,title,date,excerpt&orderby=date&order=desc` (same `WP_APP_PASSWORD` Step 8 uses).
+- **Static-site** — read the SSG's content directory directly (`ls content/posts/*.md`) or maintain a hand-curated `posts-inventory.json` in the repo.
+
+Save the chosen targets so Step 3 can splice them in and Step 7g can verify they survived the audit:
+
+```bash
+cat > tmp/blog-drafts/<slug>.interlinks.json <<'EOF'
+{
+  "outbound": [
+    {"slug": "<prior-slug-1>", "url": "https://<your-host>/<prior-slug-1>/", "anchor_phrase": "<noun phrase>"},
+    {"slug": "<prior-slug-2>", "url": "https://<your-host>/<prior-slug-2>/", "anchor_phrase": "<noun phrase>"}
+  ]
+}
+EOF
+```
+
+Step 7g verifies that every `outbound[].url` appears at least once as an `href` in the final draft. If you decided mid-draft to drop a link, edit the file before re-running 7g. Posts under 800 words can skip this step; long posts ship with outbound links or they look orphaned to both the reader and the site graph.
+
+> **Note on inbound links.** Editing prior posts after publish to add a forward link back to the new one (inbound splicing) is a separate concern that depends on having write access to historical posts and a state file to keep the operation idempotent. This skill does not handle it — too platform-specific to generalize. If you want it, run it as a cron against your platform's API after publish.
 
 ---
 
@@ -187,10 +216,14 @@ Do not use `target="_blank"` — most blog themes handle outbound link UX themse
 
 - **Open with a TL;DR block.** First child of the body is `<p><strong>TL;DR:</strong> ...</p>` — a single sentence, 8-40 words, that answers the query directly with specific nouns (tool name, version, error code, command). LLM citation hook. Asserted in Step 7g.
 - **Lead paragraph follows the TL;DR** with one or two sentences of context (when this hits, who it bites, why other guides miss the cause). It is not a re-statement of the answer.
-- **H2/H3 phrased like queries.** `## How to fix the "ECONNREFUSED" error in n8n` beats `## Fixing the connection error`.
+- **H2 as a question or operational label.** Every `<h2>` either ends with `?` (e.g. `## How do you fix the "ECONNREFUSED" error in n8n?`) **or** is one of the allowlist: `Install`, `Prerequisites`, `Links`, `TL;DR`, `FAQ`, `Frequently asked questions`, `Summary`, `References`, `Further reading`, `Sources`, `Bottom line`. `<h3>` follows the same convention. Question-shaped H2s are how Google AI Overviews and Perplexity slice the page into citable chunks. Asserted in Step 7g.
 - **Specific over general.** Real version numbers, real error messages, real prices. No "modern", "powerful", "robust", "seamless."
 - **Impersonal voice.** "Here's the fix." Not "we found that" and not "I tried this."
 - **Forensic linking.** Every external claim links on the noun phrase that names the source. Every external link has `rel="nofollow noopener"`.
+- **Bullet discipline.** No `<ul>` or `<ol>` under 3 items — convert to prose. No list over 9 items without a sub-grouping (split into 2 lists under separate H3s, or fold into a `<table>`). Every `<li>` carries a data point, recommendation, or argument; each ends with a period; parallel grammar across items. Asserted in Step 7g.
+- **Structured-spec labels for diagnostic posts.** Troubleshooting roundups, "N reasons X is broken", and cause/effect listicles repeat a labeled triple inside every item — the default is `**Symptom:**` / `**Diagnostic:**` / `**Fix:**` (one paragraph each). The bold-keyword-colon form is allowed here and only here. For migration posts use `**Before:**` / `**After:**` / `**Migration step:**`; for comparison posts use `**When to pick:**` / `**Avoid if:**` / `**Cost:**`. This is what gets AI assistants to extract per-item structured citations instead of mashing the whole list into one quote.
+- **Recap checklist before the FAQ for enumerative posts.** Posts with **three or more enumerated items** close with an `<ol>` of one-sentence imperative steps under a question-shaped H2 (e.g. `<h2>How do you test all seven blockers in 20 minutes?</h2>`). One step per body item, no sub-bullets. Skip for posts under 800 words or fewer than three items. The recap is what gets quoted as the AI-answer "summary" — without it the model has to invent one.
+- **Currency where it matters.** Any version number, year, or price in a load-bearing claim either is current (cross-check against vendor docs in Step 5) or carries `as of <YYYY-MM>` next to it so a reader knows the time-context. Step 7g flags any year > 1 year stale without an explicit `as of` qualifier.
 - **End with a `<h2>FAQ</h2>` block** — 3-6 H3 questions, each with a 1-3 sentence answer.
 - **Self-check:** *Does the TL;DR stand alone as a quotable answer? Does the lead paragraph add context the TL;DR doesn't have? If either fails, rewrite.*
 
@@ -249,7 +282,7 @@ Run the audit against the draft, checking each pass:
 
 1. **Structure pass** — does the lead answer the query in the first paragraph; do H2s match query phrasing; is each section self-contained.
 2. **Authority pass** — at least one cited primary source (vendor doc / GitHub issue / changelog) on a relevant noun phrase.
-3. **Freshness pass** — current year referenced where it makes sense; version numbers are current.
+3. **Freshness pass** — current year referenced where it makes sense; version numbers are current. **Currency check, mandatory:** any version number cited must still be the current (or one of the still-supported) versions per vendor docs. A 6-month-old "introduced in CrewAI 0.114" may now read as historical context, not present-tense scope. If the version has rolled forward, either update the framing or add `as of <YYYY-MM>` next to the claim so the reader knows the time-context. Vendors ship fast; stale qualifiers tank citation quality.
 4. **Schema readiness** — most platforms emit Article + Person + Organization schema automatically. Step 7b adds FAQPage + BreadcrumbList (always) and HowTo (procedural posts only). Confirm the FAQ block has H3 question + paragraph answer pairs the 7b extractor can parse.
 5. **Long-tail coverage** — does the FAQ block capture 3-6 long-tail variants of the main query.
 6. **Platform-fact pass** — any claim about a specific shell, OS, language runtime, or tool is a verifiable fact, not a vibe. Verify the load-bearing ones against vendor docs before publish.
@@ -310,7 +343,7 @@ print(f'{len(violations)} violation(s)')
 
 ## Step 6 — Illustrate the post (optional)
 
-Figures are not required for every post, but recommended for posts over 800 words. **Rule of thumb:** 1 figure per ~500 body words.
+Figures are not required for short posts, but **mandatory for posts >=800 words**. The rule: `figures >= max(1, words // 500)` whenever body word count >=800. An 800-word post -> 1-2 figures. A 1200-word post -> 2-3. A 1500-word post -> 3. Step 7g asserts this. Past failure mode this rule is fixing: long troubleshooting posts (1000+ words) shipped with zero figures because the agent declared the topic "too definitional" — the assert refuses those bundles.
 
 For figure generation (SVG flow diagrams, comparison charts, taxonomy diagrams, OG feature cards) see the companion `blog-figure-svg` skill — it generates accessible SVGs with consistent styling and rasterizes them for upload. The skill is CMS-agnostic; it produces PNG files that any adapter in Step 8 can upload.
 
@@ -589,6 +622,76 @@ if meta.get("status") == "scheduled":
     assert ts > datetime.datetime.now(datetime.timezone.utc), \
            f"scheduled published_at must be in the future, got {pa}"
 
+# H2 question-shape gate (Step 3 voice rule)
+# Every H2 ends with '?' OR is in the operational-label allowlist.
+H2_QUESTION_ALLOWLIST = {
+    "install", "prerequisites", "links", "tl;dr", "tldr",
+    "faq", "frequently asked questions", "summary", "references",
+    "further reading", "sources", "bottom line",
+}
+_h2_inner = re.findall(r'<h2\b[^>]*>(.*?)</h2>', html, flags=re.S|re.I)
+_h2_text = [re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', h)).strip() for h in _h2_inner]
+_bad_h2 = [h for h in _h2_text
+           if h and not h.endswith('?')
+           and h.lower().strip(':?. ') not in H2_QUESTION_ALLOWLIST]
+assert not _bad_h2, \
+    "H2s must end with '?' or be in the allowlist (Step 3). Bad H2s: " + \
+    "; ".join(repr(h) for h in _bad_h2) + \
+    ". Rewrite as natural-language questions, e.g. 'How do you ...?', 'Why does ...?', 'When should you ...?'."
+
+# Body word count (same recipe as Step 5)
+_no_code = re.sub(r'<pre\b[^>]*>.*?</pre>', ' ', html, flags=re.S|re.I)
+_no_table = re.sub(r'<table\b[^>]*>.*?</table>', ' ', _no_code, flags=re.S|re.I)
+_no_fig = re.sub(r'<figure\b[^>]*>.*?</figure>', ' ', _no_table, flags=re.S|re.I)
+_no_script = re.sub(r'<script\b[^>]*>.*?</script>', ' ', _no_fig, flags=re.S|re.I)
+_text_only = re.sub(r'<[^>]+>', ' ', _no_script)
+_words = len(re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*", _text_only))
+
+# Figure-count gate (Step 6 rule): max(1, words // 500) when body >= 800 words
+fig_count = len(re.findall(r'<figure\b', html, flags=re.I))
+_required = max(1, _words // 500) if _words >= 800 else 0
+assert fig_count >= _required, \
+    f"figure shortfall: {fig_count} present, {_required} required for {_words}-word body. Step 6."
+
+# Bullet discipline gate (Step 3 voice rule)
+# Reject any <ul>/<ol> with fewer than 3 items or more than 9 items.
+# Recap-checklist <ol> after the last H2 question is exempt from the upper bound;
+# common practice ships a 5-7 step recap that should not be split.
+_lists = re.findall(r'<(ul|ol)\b[^>]*>(.*?)</\1>', html, flags=re.S|re.I)
+_bad_lists = []
+for kind, body in _lists:
+    items = re.findall(r'<li\b', body, flags=re.I)
+    n = len(items)
+    if n < 3:
+        _bad_lists.append(f"<{kind}> with {n} items (min 3; convert to prose)")
+    elif n > 9:
+        _bad_lists.append(f"<{kind}> with {n} items (max 9; split or use a <table>)")
+assert not _bad_lists, \
+    "bullet discipline (Step 3): " + "; ".join(_bad_lists)
+
+# Currency check (Step 3 / Step 5 rule)
+# Flag any cited year that is > 1 year stale relative to the current year
+# unless an explicit 'as of <YYYY>' or 'as of <YYYY-MM>' qualifier sits within 80 chars.
+import datetime as _dt
+_now_year = _dt.datetime.now(_dt.timezone.utc).year
+_text_for_dates = re.sub(r'<(pre|code|script|style)\b[^>]*>.*?</\1>', ' ', html, flags=re.S|re.I)
+_stale = []
+for m in re.finditer(r'\b(20\d{2})\b', _text_for_dates):
+    y = int(m.group(1))
+    if y > _now_year:
+        continue
+    if _now_year - y <= 1:
+        continue
+    window_start = max(0, m.start() - 80)
+    window = _text_for_dates[window_start:m.end() + 80]
+    if re.search(r'as of\s+20\d{2}', window, flags=re.I):
+        continue
+    _stale.append(m.group(1))
+assert not _stale, \
+    "currency check (Step 5): stale year(s) cited without 'as of <YYYY>' qualifier: " + \
+    ", ".join(sorted(set(_stale))) + \
+    f". Either update to {_now_year - 1}-{_now_year} or add 'as of <YYYY-MM>' within 80 chars of the year."
+
 # Figure caption gate: every <figure> must contain a non-empty <figcaption>
 figures = re.findall(r'<figure\b[^>]*>.*?</figure>', html, flags=re.S|re.I)
 uncaptioned = []
@@ -600,11 +703,60 @@ for i, fig in enumerate(figures, 1):
 assert not uncaptioned, \
     "missing/empty <figcaption> on: " + ", ".join(uncaptioned)
 
-print(f"bundle OK ({len(figures)} figures, all captioned)")
+# Outbound interlink survival (Step 1f rule): every planned URL appears in the draft
+_il_path = pathlib.Path(f"tmp/blog-drafts/{slug}.interlinks.json")
+if _il_path.exists():
+    _il = json.loads(_il_path.read_text(encoding='utf-8'))
+    _missing = [t["url"] for t in _il.get("outbound", [])
+                if t.get("url") and f'href="{t["url"]}"' not in html]
+    assert not _missing, \
+        "outbound interlinks planned in Step 1f but missing from draft: " + \
+        ", ".join(_missing) + ". Splice them into Step 3 prose or remove from interlinks.json."
+
+print(f"bundle OK ({_words} words, {fig_count} figures, all captioned, {len(_h2_text)} H2s)")
 PY
 ```
 
 If any assert fires, fix and re-build before Step 8.
+
+### 7h. Refresh metadata snapshot
+
+Save a small JSON snapshot of the post's facts so a future refresh pass can identify staleness without re-reading the prose. Cheap to write now; expensive to backfill at 500 posts.
+
+```bash
+python3 - "<slug>" "<format>" <<'PY'
+import json, pathlib, datetime, re, sys
+slug, fmt = sys.argv[1], sys.argv[2]
+html = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html").read_text(encoding='utf-8')
+
+# Version detector: requires a leading "v" OR a preceding tool/runtime keyword
+# to avoid swallowing IPv4 octets ("127.0.0.1" -> "127.0.0") on networking posts.
+# Add your own keywords to the second alternation for project-specific tools.
+versions = sorted(set(
+    re.findall(r'\bv\d+\.\d+(?:\.\d+)?\b', html) +
+    [m.group(2) for m in re.finditer(
+        r'\b(version|node|n8n|python|ubuntu|debian|docker|nginx|caddy|postgres|sqlite|claude|cursor|wordpress|ghost)\b[^\n<]{0,15}?(\d+\.\d+(?:\.\d+)?)',
+        html, flags=re.I)]
+))
+
+record = {
+    "slug": slug,
+    "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "format": fmt,
+    "versions_cited": versions,
+    "prices_cited": sorted(set(re.findall(r'\$\d+(?:\.\d+)?(?:/\w+)?', html))),
+    "years_cited": sorted(set(re.findall(r'\b20\d{2}\b', html))),
+    "external_sources": sorted(set(
+        m.group(1) for m in re.finditer(r'href="(https?://[^"]+)"', html))),
+}
+pathlib.Path(f"tmp/blog-drafts/{slug}.refresh.json").write_text(
+    json.dumps(record, indent=2), encoding='utf-8')
+print(f"refresh snapshot written: {len(versions)} versions, "
+      f"{len(record['years_cited'])} years, {len(record['external_sources'])} external sources")
+PY
+```
+
+When a topic refresh comes due (typically every 6-12 months for high-traffic posts), the refresh skill (future / your-own) diffs the snapshot's `versions_cited` against current vendor docs. Versions that have rolled forward by a major release are flagged for rewrite; everything else is left alone.
 
 ---
 
@@ -966,3 +1118,29 @@ curl -sS "<base-url>/<slug>/" | grep -oE '"@type":\s*"[^"]+"' | sort -u
 - **`blog-figure-svg`** — generate accessible SVG figures (flow diagrams, comparison charts, taxonomy diagrams) with consistent styling. Run this *during Step 6* if the post needs illustrations.
 
 Together, the three form a complete long-tail SEO publishing pipeline: research the topic, write the post, illustrate it, publish.
+
+---
+
+## Maintenance scripts
+
+The per-post scrub in Step 4a covers the common LLM-tell characters and the per-post audit in Step 7g enforces the structural rules. For corpus-wide drift — characters or banlist phrases that crept back in across many posts — there's a separate audit script in the repo:
+
+```bash
+# Sweep your published-content directory for non-ASCII chars + prose banlist
+python3 scripts/audit-corpus.py path/to/your/content/
+
+# Examples (per platform):
+python3 scripts/audit-corpus.py tmp/blog-drafts/                  # current drafts
+python3 scripts/audit-corpus.py content/posts/                    # Hugo / Astro / 11ty
+python3 scripts/audit-corpus.py site/source/_posts/               # Jekyll
+
+# Add domain-specific terms you want flagged (comma-separated):
+python3 scripts/audit-corpus.py content/posts/ --extra "synergy,best-in-class"
+
+# CI mode: exit 1 on any hit, pipe to your notifier or fail the build
+python3 scripts/audit-corpus.py content/posts/ >/dev/null || echo "drift detected"
+```
+
+Default scan covers `*.html` and `*.md`. The script exits `0` clean / `1` on hits / `2` on bad invocation, so it composes with CI. Run it weekly (or as a pre-deploy step) — much cheaper than re-reading every post by hand.
+
+Don't point it at the publishing-skills repo itself or at the seo-blog-writer SKILL.md: both contain the banlist literals as data and will self-flag. Target your *content* directory, not your *tooling* directory.

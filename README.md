@@ -7,7 +7,7 @@ Built for indie hackers, founders, content marketers, and dev-tool teams who wan
 | Skill | What it does | Who it's for |
 |---|---|---|
 | **`blog-topic-research`** | Validates a topic has real, verifiable demand (People Also Ask, Reddit, Stack Overflow, GitHub issues, vendor forums, changelogs) before you spend tokens drafting. Every accepted topic carries citable evidence URLs, a problem summary, confirmed fixes, version context, and FAQ variants the writer can use directly. | Anyone tired of writing posts nobody searches for, and editorial pipelines that need an evidence-backed backlog. |
-| **`seo-blog-writer`** | End-to-end pipeline for a single post: classify → research → draft clean HTML → scrub LLM tells → AI-SEO audit → publish. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. **Platform-pluggable publish step** — ships with Ghost Admin API, WordPress REST, and static-site adapters; any other CMS is a ~20-line snippet. | Founders and marketers who want to ship one ranking post a day without paying a writer or a designer. |
+| **`seo-blog-writer`** | End-to-end pipeline for a single post: classify → research → outbound interlinks → draft clean HTML → scrub LLM tells → AI-SEO audit → publish. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. Pre-publish gate asserts H2-question shape, figure count (`max(1, words // 500)` for 800+ word posts), bullet discipline (3-9 items), and currency (`as of <YYYY>` qualifier on stale years). **Platform-pluggable publish step** — ships with Ghost Admin API, WordPress REST, and static-site adapters; any other CMS is a ~20-line snippet. | Founders and marketers who want to ship one ranking post a day without paying a writer or a designer. |
 | **`blog-figure-svg`** | Generates accessible SVG figures (flow, comparison bars, taxonomy, terminal mocks, 1600x840 OG feature cards) with a consistent palette, screen-reader metadata, and figcaption-ready output. Rasterizes to compressed PNG for upload to any CMS. | Anyone shipping more than 3 posts a month who doesn't want stock photos or Midjourney filler on every article. |
 
 Together, they form a complete pipeline: **research the topic → write the post → illustrate it → publish to your platform of choice**.
@@ -72,6 +72,17 @@ cp -r publishing-skills/skills/* .claude/skills/
   - **WordPress adapter**: `pip install requests`; `WP_URL` + `WP_USER` + `WP_APP_PASSWORD` env vars.
   - **Static-site adapter**: no credentials; just a target directory in your SSG repo.
 - **`blog-figure-svg`** — Python 3, plus one SVG rasterizer (ImageMagick / `rsvg-convert` / Inkscape / `cairosvg`) and optionally `pngquant` for compression.
+
+## Maintenance scripts
+
+The per-post audit inside `seo-blog-writer` catches structural problems before publish. For corpus-wide drift — characters or banlist phrases that crept back across many posts — run [`scripts/audit-corpus.py`](scripts/audit-corpus.py) against your content directory:
+
+```bash
+python3 scripts/audit-corpus.py path/to/your/content/
+python3 scripts/audit-corpus.py content/posts/ --extra "synergy,best-in-class"
+```
+
+Exits `0` clean / `1` on hits — composes with CI for a pre-deploy drift gate.
 
 ## Why platform-agnostic?
 
