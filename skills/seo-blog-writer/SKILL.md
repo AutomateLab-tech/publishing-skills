@@ -1,7 +1,7 @@
 ---
 name: seo-blog-writer
 description: "Turn a single long-tail query into a publish-ready blog post that ranks in search and gets quoted by AI assistants. Runs the full pipeline: classify the topic, research it against real sources, draft clean HTML, scrub LLM-tell vocabulary and typography, audit for AI-SEO (TL;DR block, query-phrased H2s, FAQ section, FAQPage + BreadcrumbList + HowTo JSON-LD), then publish through a platform adapter (Ghost Admin API, WordPress REST, or static-site file output). Platform-agnostic core; swap the publish step without rewriting the writing pipeline. Built for indie hackers, founders, and content marketers who want AI to draft posts that are actually citable - not paraphrased docs, not hallucinated benchmarks. Trigger when the user says: 'write a blog post on X', 'draft an article about X', 'publish a post on X to Ghost / WordPress / the static site', or any request to ship editorial content for a long-tail query."
-version: 2.1.0
+version: 2.2.0
 emoji: "✍️"
 homepage: https://github.com/AutomateLab-tech/publishing-skills
 metadata:
@@ -757,6 +757,35 @@ PY
 ```
 
 When a topic refresh comes due (typically every 6-12 months for high-traffic posts), the refresh skill (future / your-own) diffs the snapshot's `versions_cited` against current vendor docs. Versions that have rolled forward by a major release are flagged for rewrite; everything else is left alone.
+
+### 7i. Glossary auto-link (optional)
+
+If you maintain a glossary of technical terms with definition pages on your site, pipe the draft HTML through `scripts/inject-glossary-links.py` to turn the first mention of each known term into an internal link to its definition page. Each link also carries a `data-definition` attribute that the bundled `references/decorate.js` snippet renders as a hover tooltip on the published page.
+
+**Skip this step if** you don't have a `glossary.json` file yet — there's no default. See [references/glossary-schema.md](references/glossary-schema.md) for the file shape and a starter example.
+
+```bash
+python3 scripts/inject-glossary-links.py \
+    tmp/blog-drafts/<slug>.draft.html \
+    --glossary path/to/glossary.json \
+    --base-url /glossary/ \
+    --max-links 6 \
+    > tmp/blog-drafts/<slug>.draft.linked.html
+
+mv tmp/blog-drafts/<slug>.draft.linked.html tmp/blog-drafts/<slug>.draft.html
+```
+
+The injector:
+
+- Links **first occurrence only** per term per post (Wikipedia rule).
+- Caps at `--max-links` (default 6), priority-sorted from the glossary.
+- Skips headings, code/pre, tables, blockquotes, asides, existing links, and the TL;DR paragraph.
+- Rejects matches embedded in identifier-like compounds (`user-agent` won't match `agent`, `@scope/ai-seo-mcp` won't match `mcp`).
+- Writes a `data-definition` attribute on each link for the tooltip.
+
+Run order: **after Step 7g validates the draft** so the validator's structural asserts run on clean HTML; **before Step 8 publishes** so the linked HTML is what ships. Glossary links count as internal navigation, not outbound — the Step 7g outbound-survival assert ignores them.
+
+To enable the hover tooltip on the live site, copy `skills/seo-blog-writer/references/decorate.js` into your theme bundle (or paste it inline in a `<script>` tag in your site `<head>`) once. It's self-contained, ~1 KB, no dependencies, and skips itself on `/glossary/*` pages.
 
 ---
 

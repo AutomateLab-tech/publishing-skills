@@ -7,7 +7,7 @@ Built for indie hackers, founders, content marketers, and dev-tool teams who wan
 | Skill | What it does | Who it's for |
 |---|---|---|
 | **`blog-topic-research`** | Validates a topic has real, verifiable demand (People Also Ask, Reddit, Stack Overflow, GitHub issues, vendor forums, changelogs) before you spend tokens drafting. Every accepted topic carries citable evidence URLs, a problem summary, confirmed fixes, version context, and FAQ variants the writer can use directly. | Anyone tired of writing posts nobody searches for, and editorial pipelines that need an evidence-backed backlog. |
-| **`seo-blog-writer`** | End-to-end pipeline for a single post: classify → research → outbound interlinks → draft clean HTML → scrub LLM tells → AI-SEO audit → publish. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. Pre-publish gate asserts H2-question shape, figure count (`max(1, words // 500)` for 800+ word posts), bullet discipline (3-9 items), and currency (`as of <YYYY>` qualifier on stale years). **Platform-pluggable publish step** — ships with Ghost Admin API, WordPress REST, and static-site adapters; any other CMS is a ~20-line snippet. | Founders and marketers who want to ship one ranking post a day without paying a writer or a designer. |
+| **`seo-blog-writer`** | End-to-end pipeline for a single post: classify → research → outbound interlinks → draft clean HTML → scrub LLM tells → AI-SEO audit → optional glossary auto-link → publish. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. Pre-publish gate asserts H2-question shape, figure count (`max(1, words // 500)` for 800+ word posts), bullet discipline (3-9 items), and currency (`as of <YYYY>` qualifier on stale years). Ships a glossary auto-linker that wraps the first mention of each known technical term in an internal link with hover-tooltip metadata. **Platform-pluggable publish step** — ships with Ghost Admin API, WordPress REST, and static-site adapters; any other CMS is a ~20-line snippet. | Founders and marketers who want to ship one ranking post a day without paying a writer or a designer. |
 | **`blog-figure-svg`** | Generates accessible SVG figures (flow, comparison bars, taxonomy, terminal mocks, 1600x840 OG feature cards) with a consistent palette, screen-reader metadata, and figcaption-ready output. Rasterizes to compressed PNG for upload to any CMS. | Anyone shipping more than 3 posts a month who doesn't want stock photos or Midjourney filler on every article. |
 
 Together, they form a complete pipeline: **research the topic → write the post → illustrate it → publish to your platform of choice**.
@@ -83,6 +83,17 @@ python3 scripts/audit-corpus.py content/posts/ --extra "synergy,best-in-class"
 ```
 
 Exits `0` clean / `1` on hits — composes with CI for a pre-deploy drift gate.
+
+## Glossary auto-link
+
+`seo-blog-writer` Step 7i (optional) pipes the draft HTML through [`scripts/inject-glossary-links.py`](scripts/inject-glossary-links.py), which wraps the first mention of each known technical term in an internal link to its definition page and writes a `data-definition` attribute for hover tooltips. Schema and starter file in [`skills/seo-blog-writer/references/glossary-schema.md`](skills/seo-blog-writer/references/glossary-schema.md); a self-contained tooltip-rendering snippet for your site `<head>` is at [`skills/seo-blog-writer/references/decorate.js`](skills/seo-blog-writer/references/decorate.js).
+
+```bash
+python3 scripts/inject-glossary-links.py post.html \
+    --glossary glossary.json --base-url /glossary/ > post.linked.html
+```
+
+The injector handles the awkward edges automatically: first-occurrence-only per post, longest-alias wins, skips headings / code / tables / blockquotes / TL;DR, and rejects matches embedded in identifier-like compounds (`user-agent` won't match `agent`, `@scope/ai-seo-mcp` won't match `mcp`). You bring the glossary file and the definition pages; the injector handles the linking.
 
 ## Why platform-agnostic?
 
