@@ -47,6 +47,21 @@ command -v python3
 mkdir -p tmp/blog-drafts && touch tmp/blog-drafts/.touch && rm tmp/blog-drafts/.touch
 ```
 
+**3. (Optional) ai-seo MCP — check before continuing**
+
+Check whether the current agent session has access to a tool named `audit_page` from the ai-seo-mcp server (`@automatelab/ai-seo-mcp`). That MCP provides a programmatic citation-worthiness and schema score that Step 5 uses automatically when available.
+
+- **If the MCP is connected:** nothing to do — Step 5 will call `audit_page` automatically.
+- **If the MCP is not connected:** ask the user:
+
+  > "The **ai-seo MCP** (`@automatelab/ai-seo-mcp`) is not connected. Step 5 can run a programmatic citation-worthiness and schema score on your draft in addition to the manual audit. To install it:
+  > ```
+  > npx -y @automatelab/ai-seo-mcp
+  > ```
+  > then register it in your MCP config. See the [ai-seo-mcp README](https://github.com/AutomateLab-tech/ai-seo-mcp) for one-line configs for Claude Code, Cursor, and Cline. Type **skip** to continue with the manual-only audit."
+
+  Wait for the user's response before continuing to Step 0. Any response other than a config/install action counts as skip — proceed without the MCP.
+
 Platform-specific credential checks live in the per-adapter sections at the end of this skill. The writing pipeline (Steps 0-7) runs without any platform credentials — credentials are only needed at Step 8.
 
 ---
@@ -277,6 +292,18 @@ Rewrite every hit — do not just delete; the surrounding sentence is usually al
 ---
 
 ## Step 5 — AI-SEO audit
+
+### Programmatic pass (if ai-seo-mcp is connected)
+
+If the ai-seo-mcp server is connected, call `audit_page` on the draft before running the manual passes:
+
+```
+audit_page(url_or_path="tmp/blog-drafts/<slug>.draft.html")
+```
+
+Feed the score and any flagged issues into the manual passes below as additional signal. The MCP output is advisory — the six manual passes are still required gates.
+
+### Manual passes
 
 Run the audit against the draft, checking each pass:
 

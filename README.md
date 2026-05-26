@@ -73,6 +73,16 @@ cp -r publishing-skills/skills/* .claude/skills/
   - **Static-site adapter**: no credentials; just a target directory in your SSG repo.
 - **`blog-figure-svg`** — Python 3, plus one SVG rasterizer (ImageMagick / `rsvg-convert` / Inkscape / `cairosvg`) and optionally `pngquant` for compression.
 
+### Optional — ai-seo MCP (programmatic citation scoring)
+
+`seo-blog-writer` Step 5 (AI-SEO audit) runs a programmatic citation-worthiness and schema pass when the [**ai-seo MCP**](https://github.com/AutomateLab-tech/ai-seo-mcp) (`@automatelab/ai-seo-mcp`) is connected. The skill checks at preflight and prompts you to install it if it's missing. Without it, Step 5 falls back to a manual reasoning pass covering the same ground.
+
+```bash
+npx -y @automatelab/ai-seo-mcp
+```
+
+Then register it in your agent's MCP config. See the [ai-seo-mcp README](https://github.com/AutomateLab-tech/ai-seo-mcp) for one-line configs for Claude Code, Cursor, and Cline.
+
 ## Maintenance scripts
 
 The per-post audit inside `seo-blog-writer` catches structural problems before publish. For corpus-wide drift — characters or banlist phrases that crept back across many posts — run [`scripts/audit-corpus.py`](scripts/audit-corpus.py) against your content directory:
