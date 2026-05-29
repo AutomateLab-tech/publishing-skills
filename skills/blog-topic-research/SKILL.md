@@ -72,6 +72,7 @@ A signal is valid only if its type is one of these, and the linked URL contains 
 | `forum` | A community-forum thread (vendor or third-party). Evidence = the thread title. |
 | `vendor_doc` | A vendor docs page that exists because users ask the question. Evidence = the page heading. |
 | `trends` | A Google Trends rising query. Evidence = the query string + the rising-percent label from Trends. |
+| `keyword_data` | Real search-volume + keyword-difficulty from DataForSEO Labs (see [Step 3d](#step-3d---dataforseo-volume--difficulty-enrichment)). URL = `dataforseo:labs/keyword_overview`. Evidence = `"<kw>" search_volume=<N>/mo, keyword_difficulty=<KD>, main_intent=<intent>, location=US`. This is the one quantitative signal — it carries an absolute volume figure because it comes from a real API, not an estimate. |
 
 **Strength tiers** (used to compute `signal_score`):
 
@@ -85,6 +86,7 @@ A signal is valid only if its type is one of these, and the linked URL contains 
 | `forum` | thread exists | >=5 replies | >=20 replies OR pinned / marked solution |
 | `vendor_doc` | page exists | page in main nav | dedicated FAQ entry or "Common errors" section |
 | `trends` | rising query | rising >=100% | rising >=500% or labelled "Breakout" |
+| `keyword_data` | search_volume >=30 | search_volume >=100 AND KD <=25 | search_volume >=300 AND KD <=15 (high-volume, winnable) |
 
 Engagement counts are read from the source page at fetch time. Record the count in the signal entry so the user can audit (e.g. `[strength=3, 14 reactions]`).
 
@@ -219,6 +221,24 @@ Extract four fields:
 
 If any of these can't be filled honestly from the body, leave the field at its empty default (`""`, `[]`, `null`) rather than fabricating. A sparsely-filled scaffold is more useful than a hallucinated one - the writer can re-research, but cannot un-trust a polluted blob.
 
+### Step 3d - DataForSEO volume & difficulty enrichment
+
+If `DATA_FOR_SEO_API_BASE64` is configured in the environment, enrich every surviving candidate with real Google search-volume + keyword-difficulty. This is the quantitative half of demand validation — the qualitative URL signals prove *someone* asks; this proves *how many* and *how hard it is to rank*.
+
+The env value is `base64(login:password)` and is used verbatim as the HTTP Basic credential. Batch all candidate primary keywords into **one** `keyword_overview` call (it accepts up to 700 keywords per request, ~$0.01 total — far cheaper than per-keyword lookups):
+
+```bash
+curl -s -X POST "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_overview/live" \
+  -H "Authorization: Basic $DATA_FOR_SEO_API_BASE64" -H "Content-Type: application/json" \
+  -d '[{"keywords":["<kw1>","<kw2>","..."],"location_code":2840,"language_code":"en"}]'
+```
+
+For each returned item read `keyword_info.search_volume`, `keyword_properties.keyword_difficulty`, and `search_intent_info.main_intent`. Attach a `keyword_data` demand signal to the matching candidate, scored per the strength tier table above, and record the volume figure in the signal's `evidence` string.
+
+**This signal counts toward `signal_score`** — a winnable keyword (vol >=300, KD <=15) is a 3-star signal that can carry a candidate to the `>=3` threshold on its own, the same as a heavy GitHub issue. Conversely, if the target blog is a new or low-authority domain, **drop any candidate whose `keyword_difficulty` exceeds your authority ceiling** (a sensible default is KD>35 for a domain with little ranking history — check the domain's standing with `domain_rank_overview` and raise the ceiling as authority grows). Log these under `high-kd-unwinnable` in the summary footer.
+
+**Graceful fallback:** if `DATA_FOR_SEO_API_BASE64` is unset, the API errors, or the account balance is exhausted (`status_code` 40200 / `money.balance` 0), skip this step entirely and fall back to qualitative-only scoring exactly as before. Print one line: `keyword enrichment skipped: <reason>`. The skill must never block on DataForSEO — it is an accelerant, not a gate.
+
 ### Step 4 - Classify, score, and validate
 
 For each candidate:
@@ -293,7 +313,7 @@ Then a summary footer:
 ```
 Requested: 50
 Validated: <X>
-Dropped:   <Y>  (cannibalization-jaccard: <a1>, cannibalization-semantic: <a2>, cannibalization-token-dupe: <a3>, low-signal-score: <b>, no primary source: <c>, off-cluster: <d>, low-specificity: <e>)
+Dropped:   <Y>  (cannibalization-jaccard: <a1>, cannibalization-semantic: <a2>, cannibalization-token-dupe: <a3>, low-signal-score: <b>, no primary source: <c>, off-cluster: <d>, low-specificity: <e>, high-kd-unwinnable: <f>)
 Cluster mix:  <cluster1>=__  <cluster2>=__  ...
 Format mix:   how-to-fix=__  how-to-connect=__  how-to-automate=__  x-vs-y=__  what-is=__  use-case=__  listicle=__  migration=__  release-recap=__
 ```
@@ -349,7 +369,7 @@ The `research_proof` blob is preserved on the backlog entry while `status = "que
 ## What this skill does NOT do
 
 - **Does not draft posts.** Pair with a writer skill downstream.
-- **Does not estimate search volume in absolute numbers** (no Ahrefs / SEMrush / Keyword Planner). Demand is qualitative, proven by source URLs - not by a hallucinated `5400 / mo` figure.
+- **Does not *guess* search volume.** Absolute volume + difficulty figures come from one source only: the DataForSEO Labs API ([Step 3d](#step-3d---dataforseo-volume--difficulty-enrichment)), and only when `DATA_FOR_SEO_API_BASE64` is configured. A `5400 / mo` figure is allowed *only* if it traces to a real `keyword_overview` response — never hand-estimated, never carried over from an SEO blog. With no API key, demand stays qualitative (proven by source URLs).
 - **Does not modify the blog's strategy docs.** Cluster targets and weights are the user's call.
 - **Does not auto-publish.** With `--append-to <path>` it adds to a backlog as `queued`; the user picks what gets written next.
 - **Does not run on a schedule by itself.** Pair with a scheduling skill if you want a weekly or monthly research run.
@@ -367,6 +387,7 @@ research <N> topics [for cluster <C>] [--append-to <path>]
 3. Mine candidates from the cluster source list, capturing verbatim text + URL + engagement count per signal. Mine issue / thread bodies for error strings and version-qualified phrases, not just titles.
 4. Recursively expand surviving candidates through Google Suggest (up to 2 passes) to push from mid-tail into long-tail.
 5. Distill substance per surviving candidate from the highest-engagement signal's body: `problem_summary`, `confirmed_fixes[]`, `version_context`, `question_variants[]`. Empty defaults are valid; never fabricate.
+5b. Enrich each candidate with real DataForSEO volume + KD (one batched `keyword_overview` call) when `DATA_FOR_SEO_API_BASE64` is set; attach a `keyword_data` signal, drop terms above your authority ceiling. Skip gracefully if no key/balance.
 6. Validate each: format match, cluster fit, three-layer cannibalization (Jaccard >=0.6 OR cosine >=0.85 OR token-dupe = drop; cosine 0.75-0.85 = REVIEW), `signal_score >= 3`, specificity floor, >=1 primary source, real keywords.
 7. Print structured per-topic blocks + summary footer.
 8. If `--append-to <path>`, confirm with user, then write to the backlog file with the proof blob preserved.
