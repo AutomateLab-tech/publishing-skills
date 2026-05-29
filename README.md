@@ -1,6 +1,6 @@
 # publishing-skills
 
-Three composable skills that turn an AI coding agent (Claude, Cursor, Codex, Gemini, Copilot, ...) into a long-tail SEO publishing pipeline. **Platform-agnostic** — works against Ghost, WordPress, Webflow, Sanity, Strapi, or any static-site generator (Hugo, Astro, Eleventy, Jekyll, Next-MDX).
+Four composable skills that turn an AI coding agent (Claude, Cursor, Codex, Gemini, Copilot, ...) into a long-tail SEO publishing pipeline. **Platform-agnostic** — works against Ghost, WordPress, Webflow, Sanity, Strapi, or any static-site generator (Hugo, Astro, Eleventy, Jekyll, Next-MDX).
 
 Built for indie hackers, founders, content marketers, and dev-tool teams who want AI to draft blog posts that actually rank in search and get quoted by AI assistants — not paraphrased docs, not hallucinated benchmarks, not generic "ultimate guide" filler.
 
@@ -9,14 +9,15 @@ Built for indie hackers, founders, content marketers, and dev-tool teams who wan
 | **`blog-topic-research`** | Validates a topic has real, verifiable demand (People Also Ask, Reddit, Stack Overflow, GitHub issues, vendor forums, changelogs) before you spend tokens drafting. Every accepted topic carries citable evidence URLs, a problem summary, confirmed fixes, version context, and FAQ variants the writer can use directly. | Anyone tired of writing posts nobody searches for, and editorial pipelines that need an evidence-backed backlog. |
 | **`seo-blog-writer`** | End-to-end pipeline for a single post: classify → research → outbound interlinks → draft clean HTML → scrub LLM tells → AI-SEO audit → optional glossary auto-link → publish. Adds FAQPage + BreadcrumbList + HowTo JSON-LD for AI-citation extractability. Pre-publish gate asserts H2-question shape, figure count (`max(1, words // 500)` for 800+ word posts), bullet discipline (3-9 items), and currency (`as of <YYYY>` qualifier on stale years). Ships a glossary auto-linker that wraps the first mention of each known technical term in an internal link with hover-tooltip metadata. **Platform-pluggable publish step** — ships with Ghost Admin API, WordPress REST, and static-site adapters; any other CMS is a ~20-line snippet. | Founders and marketers who want to ship one ranking post a day without paying a writer or a designer. |
 | **`blog-figure-svg`** | Generates accessible SVG figures (flow, comparison bars, taxonomy, terminal mocks, 1600x840 OG feature cards) with a consistent palette, screen-reader metadata, and figcaption-ready output. Rasterizes to compressed PNG for upload to any CMS. | Anyone shipping more than 3 posts a month who doesn't want stock photos or Midjourney filler on every article. |
+| **`blog-editorial-calendar`** | The orchestration layer over the other three. Keeps an evidence-backed backlog, picks the next topic so your corpus drifts toward the cluster + format mix you defined in `config.json`, schedules posts into a rolling daily cadence, reconciles the backlog against what's live on your CMS, and auto-refills via `blog-topic-research` when the queue runs dry. Drives whatever adapter `seo-blog-writer` is configured for. | Teams who want a hands-off cadence that publishes on schedule and stays balanced — not a pile of posts in one category. |
 
-Together, they form a complete pipeline: **research the topic → write the post → illustrate it → publish to your platform of choice**.
+Together, they form a complete pipeline: **plan the cadence → research the topic → write the post → illustrate it → publish to your platform of choice**.
 
 ## Installing
 
 ### Via skills.sh (any agent runtime)
 
-Installs all 3 skills into Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, and 50+ other runtimes at once:
+Installs all 4 skills into Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, and 50+ other runtimes at once:
 
 ```bash
 npx skills add AutomateLab-tech/publishing-skills
@@ -30,6 +31,7 @@ clawhub login
 clawhub skill install blog-topic-research
 clawhub skill install seo-blog-writer
 clawhub skill install blog-figure-svg
+clawhub skill install blog-editorial-calendar
 ```
 
 ### Manually
@@ -44,13 +46,13 @@ cp -r publishing-skills/skills/* .claude/skills/
 ## How they compose
 
 ```
-+----------------------+      +------------------+      +-------------------+      +-------------------+
-| blog-topic-research  | ---> | (operator review)| ---> |  seo-blog-writer  | <--- |  blog-figure-svg  |
-| 'is the topic worth  |      |  'pick what to   |      | 'write + publish' |      | 'illustrate the   |
-|  writing about?'     |      |   write next'    |      |                   |      |   post'           |
-+----------------------+      +------------------+      +-------------------+      +-------------------+
-                                                                |
-                                                                v
++----------------------+      +--------------------------+      +-------------------+      +-------------------+
+| blog-topic-research  | ---> | blog-editorial-calendar  | ---> |  seo-blog-writer  | <--- |  blog-figure-svg  |
+| 'is the topic worth  |      | 'pick the next topic to  |      | 'write + publish' |      | 'illustrate the   |
+|  writing about?'     | <--- |  balance the corpus +    |      |                   |      |   post'           |
++----------------------+ refill  schedule the cadence'   |      +-------------------+      +-------------------+
+                              +--------------------------+               |
+                                                                         v
                                               +----------------------------------+
                                               | platform adapter (one of):       |
                                               |   - Ghost Admin API              |
@@ -61,6 +63,7 @@ cp -r publishing-skills/skills/* .claude/skills/
 ```
 
 - **`blog-topic-research`** runs first — it answers "does anyone actually search this?" before you spend tokens drafting.
+- **`blog-editorial-calendar`** picks the next topic to keep the corpus balanced against your target mix, schedules it into a rolling cadence, and calls `blog-topic-research` to refill when the backlog runs dry. (Optional — you can drive the writer by hand instead.)
 - **`seo-blog-writer`** consumes the research-proof scaffold (or runs from scratch), drafts the HTML, validates the bundle, and ships it through a platform adapter.
 - **`blog-figure-svg`** is invoked from within the writer's illustration step (or standalone) when a post needs charts, diagrams, or a feature card.
 
@@ -113,7 +116,7 @@ This repo separates them. The writer produces a stable bundle (`<slug>.draft.htm
 
 ## Provenance
 
-Extracted and generalized from the editorial pipeline running [automatelab.tech](https://automatelab.tech). The internal versions (`al-topic-research`, `al-write-blog-post`) are coupled to that site's tag taxonomy, cluster palettes, and backlog state; this repo strips those internals and parameterizes everything site-specific (hostname, author slug, tags, palettes) so the skills work against any blog on any platform.
+Extracted and generalized from the editorial pipeline running [automatelab.tech](https://automatelab.tech). The internal versions (`al-topic-research`, `al-write-blog-post`, `al-editorial-calendar`) are coupled to that site's tag taxonomy, cluster palettes, and backlog state; this repo strips those internals and parameterizes everything site-specific (hostname, author slug, tags, palettes, cluster weights) so the skills work against any blog on any platform.
 
 ## License
 
