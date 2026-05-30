@@ -450,62 +450,7 @@ The blocks must go in a platform-specific "head injection" slot:
 
 ```bash
 # Args: slug, headline, format, primary-tag-name, canonical-base-url
-python3 - "<slug>" "<headline>" "<format>" "<primary-tag>" "https://blog.example.com" <<'PY'
-import json, re, pathlib, sys
-slug, headline, fmt, primary_tag, base = sys.argv[1:6]
-base = base.rstrip('/')
-draft = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html")
-html = draft.read_text(encoding='utf-8')
-
-def slugify(s):
-    return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')
-
-blocks = []
-
-# 1. BreadcrumbList — always
-blocks.append(("BreadcrumbList", {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-        {"@type":"ListItem","position":1,"name":"Home","item":f"{base}/"},
-        {"@type":"ListItem","position":2,"name":primary_tag,
-         "item":f"{base}/tag/{slugify(primary_tag)}/"},
-        {"@type":"ListItem","position":3,"name":headline,
-         "item":f"{base}/{slug}/"},
-    ],
-}))
-
-# 2. FAQPage — extracted from the FAQ block
-m = re.search(r'<h2[^>]*>\s*FAQ\s*</h2>(.*)$', html, flags=re.S|re.I)
-qa = []
-if m:
-    pairs = re.findall(r'<h3[^>]*>(.*?)</h3>\s*<p[^>]*>(.*?)</p>', m.group(1), flags=re.S|re.I)
-    qa = [{"@type":"Question",
-           "name": re.sub(r'<[^>]+>','',q).strip(),
-           "acceptedAnswer":{"@type":"Answer","text": re.sub(r'<[^>]+>','',a).strip()}}
-          for q, a in pairs]
-if qa:
-    blocks.append(("FAQPage", {"@context":"https://schema.org","@type":"FAQPage","mainEntity":qa}))
-else:
-    print("WARN: no FAQ Q/A pairs found — Step 3 requires an FAQ block", file=sys.stderr)
-
-# 3. HowTo — procedural formats with >=3 step-shaped H2s
-if fmt in {"how-to-fix", "how-to-connect", "how-to-automate", "use-case", "migration"}:
-    h2s = re.findall(r'<h2[^>]*>(.*?)</h2>', html)
-    proc = [re.sub(r'<[^>]+>','',h).strip() for h in h2s
-            if re.match(r'^\s*(Step|How to|Fix|Configure|Set up|Install|Create|Add|Enable)',
-                        re.sub(r'<[^>]+>','',h).strip(), flags=re.I)]
-    if len(proc) >= 3:
-        blocks.append(("HowTo", {"@context":"https://schema.org","@type":"HowTo",
-                                 "name": headline,
-                                 "step":[{"@type":"HowToStep","name":s,"position":i+1}
-                                         for i,s in enumerate(proc)]}))
-
-ci = "\n".join(f'<script type="application/ld+json">{json.dumps(b, ensure_ascii=False)}</script>'
-               for _, b in blocks)
-pathlib.Path(f"tmp/blog-drafts/{slug}.schema.html").write_text(ci, encoding='utf-8')
-print(f"wrote {len(blocks)} JSON-LD block(s): {[t for t,_ in blocks]}")
-PY
+python3 scripts/seo-blog-writer/build-schema.py "<slug>" "<headline>" "<format>" "<primary-tag>" "<canonical-base-url>"
 ```
 
 ### 7c. Feature image (recommended)
@@ -546,54 +491,32 @@ Maintain a small canonical tag list in your project (don't let the AI invent new
 
 ### 7f. Build the metadata bundle
 
-```bash
-python3 - <<'PY'
-import json, pathlib, sys
+Write the per-post fields into `tmp/blog-drafts/<slug>.params.json`, then run the
+builder. It validates required fields and maps the status flags to every adapter.
 
-# Edit per post:
-SLUG = "<slug>"
-HEADLINE = "<headline>"
-TAGS = ["How To", "n8n"]                # first entry is the primary tag passed to 7b
-AUTHOR_SLUG = "<author-slug>"
-AUTHOR_NAME = "<author display name>"
-FEATURE_IMAGE = "<https://cdn.example.com/feature.png>"   # or "" / relative path for static
-FEATURE_IMAGE_ALT = "<one-line alt text, <=191 chars>"
-FEATURE_IMAGE_CAPTION = "<one sentence, 12-25 words, restates the post promise>"
-META_TITLE = "<SEO title under 60 chars>"
-META_DESCRIPTION = "<SEO description, 140-160 chars>"
-CUSTOM_EXCERPT = "<dek shown on index page>"
-PUBLISH_FLAG = False              # set by --publish
-PUBLISH_AT_ISO = None             # set by --publish-at <iso>
+`params.json` shape:
 
-# status semantics map cleanly to every adapter:
-#   default              -> "draft"
-#   --publish            -> "published"
-#   --publish-at <iso>   -> "scheduled" + published_at
-status, published_at = "draft", None
-if PUBLISH_AT_ISO:
-    status, published_at = "scheduled", PUBLISH_AT_ISO
-elif PUBLISH_FLAG:
-    status = "published"
-
-meta = {
-    "slug": SLUG,
-    "title": HEADLINE,
-    "tags": TAGS,
-    "author": {"slug": AUTHOR_SLUG, "name": AUTHOR_NAME},
-    "meta_title": META_TITLE,
-    "meta_description": META_DESCRIPTION,
-    "custom_excerpt": CUSTOM_EXCERPT,
-    "feature_image": FEATURE_IMAGE or None,
-    "feature_image_alt": FEATURE_IMAGE_ALT if FEATURE_IMAGE else None,
-    "feature_image_caption": FEATURE_IMAGE_CAPTION if FEATURE_IMAGE else None,
-    "status": status,
-    "published_at": published_at,
+```json
+{
+  "title": "<headline>",
+  "tags": ["How To", "n8n"],
+  "author": {"slug": "<author-slug>", "name": "<author display name>"},
+  "meta_title": "<SEO title under 60 chars>",
+  "meta_description": "<SEO description, 140-160 chars>",
+  "custom_excerpt": "<dek shown on index page>",
+  "feature_image": "",
+  "feature_image_alt": "",
+  "feature_image_caption": "",
+  "publish": false,
+  "publish_at": null
 }
+```
 
-pathlib.Path(f"tmp/blog-drafts/{SLUG}.metadata.json").write_text(
-    json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-print("metadata written")
-PY
+First tag is the primary tag (passed to 7b for the breadcrumb). Set `publish: true`
+for `--publish`; `publish_at` (ISO-UTC) for `--publish-at` (mutually exclusive).
+
+```bash
+python3 scripts/seo-blog-writer/build-metadata.py "<slug>"
 ```
 
 ### 7g. Pre-publish bundle validation
@@ -601,147 +524,7 @@ PY
 Before invoking the platform adapter, all of these must hold:
 
 ```bash
-python3 - "<slug>" <<'PY'
-import json, pathlib, re, sys
-slug = sys.argv[1]
-meta = json.loads(pathlib.Path(f"tmp/blog-drafts/{slug}.metadata.json").read_text())
-html = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html").read_text(encoding='utf-8')
-schema = pathlib.Path(f"tmp/blog-drafts/{slug}.schema.html").read_text(encoding='utf-8')
-
-assert meta.get("author", {}).get("slug"), "author.slug missing"
-assert meta.get("tags"), "tags list empty"
-
-# Feature image: if set, alt text is required and capped at 191
-if meta.get("feature_image"):
-    alt = meta.get("feature_image_alt") or ""
-    assert alt.strip(), "feature_image_alt required when feature_image is set"
-    assert len(alt) <= 191, \
-        f"feature_image_alt is {len(alt)} chars; cap at 191 (Ghost varchar(191))"
-
-# JSON-LD in schema.html
-assert '"@type": "FAQPage"' in schema or '"@type":"FAQPage"' in schema, \
-       "FAQPage JSON-LD missing in schema.html - re-run 7b"
-assert '"@type": "BreadcrumbList"' in schema or '"@type":"BreadcrumbList"' in schema, \
-       "BreadcrumbList JSON-LD missing in schema.html - re-run 7b"
-
-# TL;DR block check
-m_first_p = re.search(r'<p\b[^>]*>(.*?)</p>', html, flags=re.S|re.I)
-assert m_first_p, "no <p> in body - TL;DR check cannot run"
-first_p_inner = m_first_p.group(1)
-assert re.search(r'^\s*<strong>\s*TL;DR\s*:?\s*</strong>', first_p_inner, flags=re.I), \
-       "first <p> must open with <strong>TL;DR:</strong>"
-_t = re.sub(r'<code\b[^>]*>.*?</code>', '', first_p_inner, flags=re.S|re.I)
-_t = re.sub(r'<pre\b[^>]*>.*?</pre>', '', _t, flags=re.S|re.I)
-tldr_text = re.sub(r'<[^>]+>', '', _t)
-tldr_text = re.sub(r'^\s*TL;DR\s*:?\s*', '', tldr_text, flags=re.I).strip()
-tldr_words = len(re.findall(r"[A-Za-z0-9][A-Za-z0-9'\-]*", tldr_text))
-assert 8 <= tldr_words <= 40, f"TL;DR must be 8-40 words, got {tldr_words}: {tldr_text!r}"
-mid_sentence_ends = len(re.findall(r'(?<!\.)[.!?]\s+[A-Z(]', tldr_text))
-assert mid_sentence_ends == 0, \
-       f"TL;DR must be a single sentence; got: {tldr_text!r}"
-
-# Scheduled posts need a future timestamp
-if meta.get("status") == "scheduled":
-    import datetime
-    pa = meta.get("published_at") or ""
-    assert pa, "scheduled posts require published_at"
-    ts = datetime.datetime.fromisoformat(pa.replace("Z","+00:00"))
-    assert ts > datetime.datetime.now(datetime.timezone.utc), \
-           f"scheduled published_at must be in the future, got {pa}"
-
-# H2 question-shape gate (Step 3 voice rule)
-# Every H2 ends with '?' OR is in the operational-label allowlist.
-H2_QUESTION_ALLOWLIST = {
-    "install", "prerequisites", "links", "tl;dr", "tldr",
-    "faq", "frequently asked questions", "summary", "references",
-    "further reading", "sources", "bottom line",
-}
-_h2_inner = re.findall(r'<h2\b[^>]*>(.*?)</h2>', html, flags=re.S|re.I)
-_h2_text = [re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', h)).strip() for h in _h2_inner]
-_bad_h2 = [h for h in _h2_text
-           if h and not h.endswith('?')
-           and h.lower().strip(':?. ') not in H2_QUESTION_ALLOWLIST]
-assert not _bad_h2, \
-    "H2s must end with '?' or be in the allowlist (Step 3). Bad H2s: " + \
-    "; ".join(repr(h) for h in _bad_h2) + \
-    ". Rewrite as natural-language questions, e.g. 'How do you ...?', 'Why does ...?', 'When should you ...?'."
-
-# Body word count (same recipe as Step 5)
-_no_code = re.sub(r'<pre\b[^>]*>.*?</pre>', ' ', html, flags=re.S|re.I)
-_no_table = re.sub(r'<table\b[^>]*>.*?</table>', ' ', _no_code, flags=re.S|re.I)
-_no_fig = re.sub(r'<figure\b[^>]*>.*?</figure>', ' ', _no_table, flags=re.S|re.I)
-_no_script = re.sub(r'<script\b[^>]*>.*?</script>', ' ', _no_fig, flags=re.S|re.I)
-_text_only = re.sub(r'<[^>]+>', ' ', _no_script)
-_words = len(re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*", _text_only))
-
-# Figure-count gate (Step 6 rule): max(1, words // 500) when body >= 800 words
-fig_count = len(re.findall(r'<figure\b', html, flags=re.I))
-_required = max(1, _words // 500) if _words >= 800 else 0
-assert fig_count >= _required, \
-    f"figure shortfall: {fig_count} present, {_required} required for {_words}-word body. Step 6."
-
-# Bullet discipline gate (Step 3 voice rule)
-# Reject any <ul>/<ol> with fewer than 3 items or more than 9 items.
-# Recap-checklist <ol> after the last H2 question is exempt from the upper bound;
-# common practice ships a 5-7 step recap that should not be split.
-_lists = re.findall(r'<(ul|ol)\b[^>]*>(.*?)</\1>', html, flags=re.S|re.I)
-_bad_lists = []
-for kind, body in _lists:
-    items = re.findall(r'<li\b', body, flags=re.I)
-    n = len(items)
-    if n < 3:
-        _bad_lists.append(f"<{kind}> with {n} items (min 3; convert to prose)")
-    elif n > 9:
-        _bad_lists.append(f"<{kind}> with {n} items (max 9; split or use a <table>)")
-assert not _bad_lists, \
-    "bullet discipline (Step 3): " + "; ".join(_bad_lists)
-
-# Currency check (Step 3 / Step 5 rule)
-# Flag any cited year that is > 1 year stale relative to the current year
-# unless an explicit 'as of <YYYY>' or 'as of <YYYY-MM>' qualifier sits within 80 chars.
-import datetime as _dt
-_now_year = _dt.datetime.now(_dt.timezone.utc).year
-_text_for_dates = re.sub(r'<(pre|code|script|style)\b[^>]*>.*?</\1>', ' ', html, flags=re.S|re.I)
-_stale = []
-for m in re.finditer(r'\b(20\d{2})\b', _text_for_dates):
-    y = int(m.group(1))
-    if y > _now_year:
-        continue
-    if _now_year - y <= 1:
-        continue
-    window_start = max(0, m.start() - 80)
-    window = _text_for_dates[window_start:m.end() + 80]
-    if re.search(r'as of\s+20\d{2}', window, flags=re.I):
-        continue
-    _stale.append(m.group(1))
-assert not _stale, \
-    "currency check (Step 5): stale year(s) cited without 'as of <YYYY>' qualifier: " + \
-    ", ".join(sorted(set(_stale))) + \
-    f". Either update to {_now_year - 1}-{_now_year} or add 'as of <YYYY-MM>' within 80 chars of the year."
-
-# Figure caption gate: every <figure> must contain a non-empty <figcaption>
-figures = re.findall(r'<figure\b[^>]*>.*?</figure>', html, flags=re.S|re.I)
-uncaptioned = []
-for i, fig in enumerate(figures, 1):
-    cap = re.search(r'<figcaption\b[^>]*>(.*?)</figcaption>', fig, flags=re.S|re.I)
-    if not cap or not re.sub(r'<[^>]+>', '', cap.group(1)).strip():
-        src = re.search(r'<img[^>]*src="([^"]+)"', fig)
-        uncaptioned.append(f"figure {i} ({src.group(1) if src else 'no src'})")
-assert not uncaptioned, \
-    "missing/empty <figcaption> on: " + ", ".join(uncaptioned)
-
-# Outbound interlink survival (Step 1f rule): every planned URL appears in the draft
-_il_path = pathlib.Path(f"tmp/blog-drafts/{slug}.interlinks.json")
-if _il_path.exists():
-    _il = json.loads(_il_path.read_text(encoding='utf-8'))
-    _missing = [t["url"] for t in _il.get("outbound", [])
-                if t.get("url") and f'href="{t["url"]}"' not in html]
-    assert not _missing, \
-        "outbound interlinks planned in Step 1f but missing from draft: " + \
-        ", ".join(_missing) + ". Splice them into Step 3 prose or remove from interlinks.json."
-
-print(f"bundle OK ({_words} words, {fig_count} figures, all captioned, {len(_h2_text)} H2s)")
-PY
+python3 scripts/seo-blog-writer/validate-bundle.py "<slug>"
 ```
 
 If any assert fires, fix and re-build before Step 8.
@@ -751,36 +534,7 @@ If any assert fires, fix and re-build before Step 8.
 Save a small JSON snapshot of the post's facts so a future refresh pass can identify staleness without re-reading the prose. Cheap to write now; expensive to backfill at 500 posts.
 
 ```bash
-python3 - "<slug>" "<format>" <<'PY'
-import json, pathlib, datetime, re, sys
-slug, fmt = sys.argv[1], sys.argv[2]
-html = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html").read_text(encoding='utf-8')
-
-# Version detector: requires a leading "v" OR a preceding tool/runtime keyword
-# to avoid swallowing IPv4 octets ("127.0.0.1" -> "127.0.0") on networking posts.
-# Add your own keywords to the second alternation for project-specific tools.
-versions = sorted(set(
-    re.findall(r'\bv\d+\.\d+(?:\.\d+)?\b', html) +
-    [m.group(2) for m in re.finditer(
-        r'\b(version|node|n8n|python|ubuntu|debian|docker|nginx|caddy|postgres|sqlite|claude|cursor|wordpress|ghost)\b[^\n<]{0,15}?(\d+\.\d+(?:\.\d+)?)',
-        html, flags=re.I)]
-))
-
-record = {
-    "slug": slug,
-    "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    "format": fmt,
-    "versions_cited": versions,
-    "prices_cited": sorted(set(re.findall(r'\$\d+(?:\.\d+)?(?:/\w+)?', html))),
-    "years_cited": sorted(set(re.findall(r'\b20\d{2}\b', html))),
-    "external_sources": sorted(set(
-        m.group(1) for m in re.finditer(r'href="(https?://[^"]+)"', html))),
-}
-pathlib.Path(f"tmp/blog-drafts/{slug}.refresh.json").write_text(
-    json.dumps(record, indent=2), encoding='utf-8')
-print(f"refresh snapshot written: {len(versions)} versions, "
-      f"{len(record['years_cited'])} years, {len(record['external_sources'])} external sources")
-PY
+python3 scripts/seo-blog-writer/refresh-meta.py "<slug>" "<format>"
 ```
 
 When a topic refresh comes due (typically every 6-12 months for high-traffic posts), the refresh skill (future / your-own) diffs the snapshot's `versions_cited` against current vendor docs. Versions that have rolled forward by a major release are flagged for rewrite; everything else is left alone.
@@ -843,89 +597,13 @@ curl -sS "$GHOST_URL/ghost/api/admin/site/" | head -c 80
 **Image upload** (call once per figure, then splice the returned URL into the draft):
 
 ```bash
-python3 - <<'PY'
-import os, sys, pathlib, datetime, requests, jwt
-
-GHOST_URL = os.environ['GHOST_URL'].rstrip('/')
-key = os.environ['GHOST_ADMIN_KEY']
-kid, secret = key.split(':', 1)
-
-iat = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-token = jwt.encode(
-    {'iat': iat, 'exp': iat + 5 * 60, 'aud': '/admin/'},
-    bytes.fromhex(secret),
-    algorithm='HS256',
-    headers={'kid': kid, 'alg': 'HS256', 'typ': 'JWT'},
-)
-
-img_path = pathlib.Path(sys.argv[1])
-with img_path.open('rb') as f:
-    r = requests.post(
-        f"{GHOST_URL}/ghost/api/admin/images/upload/",
-        headers={'Authorization': f'Ghost {token}'},
-        files={'file': (img_path.name, f, 'image/png')},
-        data={'purpose': 'image'},
-    )
-r.raise_for_status()
-print(r.json()['images'][0]['url'])
-PY
+python3 scripts/seo-blog-writer/ghost-upload-image.py "<image-path>"
 ```
 
 **Publish the post**:
 
 ```bash
-python3 - "<slug>" <<'PY'
-import os, sys, json, pathlib, datetime, requests, jwt
-
-slug = sys.argv[1]
-ghost_url = os.environ['GHOST_URL'].rstrip('/')
-key = os.environ['GHOST_ADMIN_KEY']
-kid, secret = key.split(':', 1)
-
-meta = json.loads(pathlib.Path(f"tmp/blog-drafts/{slug}.metadata.json").read_text())
-html = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html").read_text(encoding='utf-8')
-schema = pathlib.Path(f"tmp/blog-drafts/{slug}.schema.html").read_text(encoding='utf-8')
-
-post = {
-    "title": meta["title"],
-    "slug": meta["slug"],
-    "html": html,
-    "status": meta["status"],
-    "tags": [{"name": t} for t in meta["tags"]],
-    "authors": [{"slug": meta["author"]["slug"]}],
-    "meta_title": meta["meta_title"],
-    "meta_description": meta["meta_description"],
-    "custom_excerpt": meta["custom_excerpt"],
-    "codeinjection_head": schema,
-}
-if meta.get("feature_image"):
-    post["feature_image"] = meta["feature_image"]
-    post["feature_image_alt"] = meta["feature_image_alt"]
-    post["feature_image_caption"] = meta["feature_image_caption"]
-if meta.get("published_at"):
-    post["published_at"] = meta["published_at"]
-
-iat = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-token = jwt.encode(
-    {'iat': iat, 'exp': iat + 5 * 60, 'aud': '/admin/'},
-    bytes.fromhex(secret),
-    algorithm='HS256',
-    headers={'kid': kid, 'alg': 'HS256', 'typ': 'JWT'},
-)
-
-r = requests.post(
-    f"{ghost_url}/ghost/api/admin/posts/?source=html",
-    headers={'Authorization': f'Ghost {token}',
-             'Content-Type': 'application/json',
-             'Accept-Version': 'v5.0'},
-    json={"posts": [post]},
-)
-if not r.ok:
-    print(f"FAILED {r.status_code}: {r.text}", file=sys.stderr); sys.exit(1)
-created = r.json()['posts'][0]
-print(json.dumps({'id': created['id'], 'url': created.get('url'),
-                  'slug': created.get('slug'), 'status': created.get('status')}, indent=2))
-PY
+python3 scripts/seo-blog-writer/publish-ghost.py "<slug>"
 ```
 
 `?source=html` tells Ghost to convert the `html` field into Lexical. Without it, Ghost treats the field as Lexical JSON and the POST fails with a 422.
@@ -956,83 +634,13 @@ curl -sS "$WP_URL/wp-json/wp/v2/" | head -c 120
 **Image upload** (returns the media id and URL):
 
 ```bash
-python3 - <<'PY'
-import os, sys, pathlib, requests
-from requests.auth import HTTPBasicAuth
-
-img = pathlib.Path(sys.argv[1])
-r = requests.post(
-    f"{os.environ['WP_URL'].rstrip('/')}/wp-json/wp/v2/media",
-    auth=HTTPBasicAuth(os.environ['WP_USER'], os.environ['WP_APP_PASSWORD']),
-    headers={"Content-Disposition": f'attachment; filename="{img.name}"',
-             "Content-Type": "image/png"},
-    data=img.read_bytes(),
-)
-r.raise_for_status()
-j = r.json(); print(j['id'], j['source_url'])
-PY
+python3 scripts/seo-blog-writer/wp-upload-image.py "<image-path>"
 ```
 
 **Publish the post**:
 
 ```bash
-python3 - "<slug>" <<'PY'
-import os, sys, json, pathlib, requests
-from requests.auth import HTTPBasicAuth
-
-slug = sys.argv[1]
-wp = os.environ['WP_URL'].rstrip('/')
-auth = HTTPBasicAuth(os.environ['WP_USER'], os.environ['WP_APP_PASSWORD'])
-
-meta = json.loads(pathlib.Path(f"tmp/blog-drafts/{slug}.metadata.json").read_text())
-html = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html").read_text(encoding='utf-8')
-schema = pathlib.Path(f"tmp/blog-drafts/{slug}.schema.html").read_text(encoding='utf-8')
-
-# Resolve tag names -> term ids (create if missing)
-def ensure_tag(name):
-    g = requests.get(f"{wp}/wp-json/wp/v2/tags",
-                     auth=auth, params={"search": name}).json()
-    for t in g:
-        if t['name'].lower() == name.lower(): return t['id']
-    return requests.post(f"{wp}/wp-json/wp/v2/tags",
-                         auth=auth, json={"name": name}).json()['id']
-
-# Resolve author slug -> user id
-def author_id(slug):
-    u = requests.get(f"{wp}/wp-json/wp/v2/users",
-                     auth=auth, params={"slug": slug}).json()
-    if not u: sys.exit(f"no WP user with slug {slug!r}")
-    return u[0]['id']
-
-status_map = {"draft": "draft", "published": "publish", "scheduled": "future"}
-
-# WordPress doesn't have a clean "codeinjection_head" slot. Two options:
-#   1. Schema goes into a custom field (`meta`) and a theme hook reads it into <head>.
-#   2. Schema is appended to the body (works because WP doesn't strip <script> on save
-#      *if the user has unfiltered_html — see notes below).
-# Option 2 is the path of least resistance for a vanilla WP; we use that here.
-body = html + "\n" + schema
-
-post = {
-    "title": meta["title"],
-    "slug": meta["slug"],
-    "content": body,
-    "status": status_map[meta["status"]],
-    "tags": [ensure_tag(t) for t in meta["tags"]],
-    "author": author_id(meta["author"]["slug"]),
-    "excerpt": meta["custom_excerpt"],
-    # Yoast / Rank Math read these via their own meta keys; vanilla WP ignores them.
-    "meta": {"_yoast_wpseo_title": meta["meta_title"],
-             "_yoast_wpseo_metadesc": meta["meta_description"]},
-}
-if meta.get("published_at"):
-    post["date_gmt"] = meta["published_at"].replace("Z", "")
-
-r = requests.post(f"{wp}/wp-json/wp/v2/posts", auth=auth, json=post)
-if not r.ok: print(r.status_code, r.text, file=sys.stderr); sys.exit(1)
-j = r.json()
-print(json.dumps({'id': j['id'], 'url': j['link'], 'status': j['status']}, indent=2))
-PY
+python3 scripts/seo-blog-writer/publish-wordpress.py "<slug>"
 ```
 
 **Notes**:
@@ -1048,39 +656,7 @@ For Hugo / Astro / Eleventy / Jekyll / Next-MDX style setups where posts live as
 **No credentials.** Just a target path.
 
 ```bash
-python3 - "<slug>" "<out-dir>" <<'PY'
-import json, pathlib, sys
-
-slug, out_dir = sys.argv[1], pathlib.Path(sys.argv[2])
-out_dir.mkdir(parents=True, exist_ok=True)
-
-meta = json.loads(pathlib.Path(f"tmp/blog-drafts/{slug}.metadata.json").read_text())
-html = pathlib.Path(f"tmp/blog-drafts/{slug}.draft.html").read_text(encoding='utf-8')
-schema = pathlib.Path(f"tmp/blog-drafts/{slug}.schema.html").read_text(encoding='utf-8')
-
-# Hugo / Jekyll-style YAML front matter; tweak the field names for your SSG.
-fm_lines = [
-    "---",
-    f'title: {json.dumps(meta["title"])}',
-    f'slug: {meta["slug"]}',
-    f'date: {meta.get("published_at") or ""}',
-    f'draft: {str(meta["status"] == "draft").lower()}',
-    f'author: {meta["author"]["slug"]}',
-    f'tags: {json.dumps(meta["tags"])}',
-    f'description: {json.dumps(meta["meta_description"])}',
-]
-if meta.get("feature_image"):
-    fm_lines.append(f'feature_image: {meta["feature_image"]}')
-    fm_lines.append(f'feature_image_alt: {json.dumps(meta["feature_image_alt"])}')
-fm_lines.append("---\n")
-
-post_path = out_dir / f"{slug}.html"
-post_path.write_text("\n".join(fm_lines) + html, encoding='utf-8')
-(out_dir / f"{slug}.schema.html").write_text(schema, encoding='utf-8')
-
-print(f"wrote {post_path}")
-print(f"wrote {out_dir / f'{slug}.schema.html'}  (include in <head> via your SSG template)")
-PY
+python3 scripts/seo-blog-writer/publish-static.py "<slug>" "<out-dir>"
 ```
 
 Your SSG's layout template needs one line to include the schema in `<head>` — e.g. for Hugo:
