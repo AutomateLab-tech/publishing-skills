@@ -114,10 +114,6 @@ The writing pipeline (research, classify, draft, scrub, AI-SEO audit, JSON-LD ge
 
 This repo separates them. The writer produces a stable bundle (`<slug>.draft.html`, `<slug>.schema.html`, `<slug>.metadata.json`) and the adapter ships it. Add Webflow, Sanity, or Strapi in an afternoon without touching the pipeline.
 
-## Provenance
-
-Extracted and generalized from the editorial pipeline running [automatelab.tech](https://automatelab.tech). The internal versions (`al-topic-research`, `al-write-blog-post`, `al-editorial-calendar`) are coupled to that site's tag taxonomy, cluster palettes, and backlog state; this repo strips those internals and parameterizes everything site-specific (hostname, author slug, tags, palettes, cluster weights) so the skills work against any blog on any platform.
-
 ## License
 
 [MIT-0](LICENSE) - public domain equivalent. Use, modify, redistribute without attribution.
