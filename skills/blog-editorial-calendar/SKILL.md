@@ -4,6 +4,11 @@ description: "Run your blog like a queue, not a guessing game. This skill is the
 version: 1.0.0
 emoji: "🗓️"
 homepage: https://github.com/AutomateLab-tech/publishing-skills
+allowed-tools: WebSearch, WebFetch, Read, Write, Bash
+author: AutomateLab <hello@automatelab.tech>
+license: MIT-0
+compatibility: Designed for Claude Code
+tags: [seo, content, publishing, editorial, blogging]
 metadata:
   openclaw:
     requires:

@@ -4,6 +4,11 @@ description: "Turn a single long-tail query into a publish-ready blog post that 
 version: 2.2.0
 emoji: "✍️"
 homepage: https://github.com/AutomateLab-tech/publishing-skills
+allowed-tools: WebSearch, WebFetch, Bash(python3:*), Read, Write
+author: AutomateLab <hello@automatelab.tech>
+license: MIT-0
+compatibility: Designed for Claude Code
+tags: [seo, content, publishing, blogging, ghost]
 metadata:
   openclaw:
     requires:

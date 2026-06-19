@@ -4,6 +4,11 @@ description: "Stop using stock photos. Generate accessible, lightweight SVG figu
 version: 1.1.0
 emoji: "🎨"
 homepage: https://github.com/AutomateLab-tech/publishing-skills
+allowed-tools: WebSearch, WebFetch, Bash(python3:*), Read, Write
+author: AutomateLab <hello@automatelab.tech>
+license: MIT-0
+compatibility: Designed for Claude Code
+tags: [seo, content, publishing, figures, svg]
 metadata:
   openclaw:
     requires:
