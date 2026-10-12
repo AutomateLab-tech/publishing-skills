@@ -28,10 +28,10 @@ npx skills add AutomateLab-tech/publishing-skills
 ```bash
 npm i -g clawhub
 clawhub login
-clawhub skill install blog-topic-research
-clawhub skill install seo-blog-writer
-clawhub skill install blog-figure-svg
-clawhub skill install blog-editorial-calendar
+clawhub install blog-topic-research
+clawhub install automatelab-seo-blog-writer
+clawhub install blog-figure-svg
+clawhub install blog-editorial-calendar
 ```
 
 ### Manually
@@ -117,3 +117,7 @@ This repo separates them. The writer produces a stable bundle (`<slug>.draft.htm
 ## License
 
 [MIT-0](LICENSE) - public domain equivalent. Use, modify, redistribute without attribution.
+
+## Maintenance and verification
+
+See [the maintenance guide](docs/maintenance-guide.md) for interpretation limits, current tool names where applicable, and reproducible verification.
