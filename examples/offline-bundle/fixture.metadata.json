@@ -1,0 +1,12 @@
+{
+  "title": "Recorded publishing fixture",
+  "slug": "fixture",
+  "status": "draft",
+  "author": {
+    "slug": "fixture-author"
+  },
+  "tags": [
+    "automation"
+  ],
+  "feature_image": null
+}
